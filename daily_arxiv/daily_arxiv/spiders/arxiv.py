@@ -11,6 +11,11 @@ class ArxivSpider(scrapy.Spider):
         self.start_urls = [
             f"https://arxiv.org/list/{cat}/new" for cat in categories
         ]  # 起始URL（计算机科学领域的最新论文）
+        
+        # Get max_papers limit from environment variable or default to None (unlimited)
+        self.max_papers = os.environ.get("MAX_PAPERS")
+        if self.max_papers:
+            self.max_papers = int(self.max_papers)
 
     name = "arxiv"  # 爬虫名称
     allowed_domains = ["arxiv.org"]  # 允许爬取的域名
@@ -21,13 +26,19 @@ class ArxivSpider(scrapy.Spider):
         for li in response.css("div[id=dlpage] ul li"):
             anchors.append(int(li.css("a::attr(href)").get().split("item")[-1]))
 
+        papers_count = 0
         for paper in response.css("dl dt"):
             if (
                 int(paper.css("a[name^='item']::attr(name)").get().split("item")[-1])
                 >= anchors[-1]
             ):
                 continue
-
+                
+            # Check if we've reached the maximum papers limit
+            if self.max_papers and papers_count >= self.max_papers:
+                break
+                
+            papers_count += 1
             yield {
                 "id": paper.css("a[title='Abstract']::attr(href)")
                 .get()
