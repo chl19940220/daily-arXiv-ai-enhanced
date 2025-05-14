@@ -29,6 +29,7 @@ jobs:
         export CATEGORIES="${{ vars.CATEGORIES }}"
         export MODEL_NAME="${{ vars.MODEL_NAME }}"
         export MAX_PAPERS="${{ vars.MAX_PAPERS }}"
+        export KEYWORDS="${{ vars.KEYWORDS }}"
         bash run.sh
     - name: commit
       run: |
