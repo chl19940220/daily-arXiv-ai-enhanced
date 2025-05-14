@@ -13,7 +13,7 @@ class ArxivSpider(scrapy.Spider):
         ]  # 起始URL（计算机科学领域的最新论文）
         
         # Get max_papers limit from environment variable or default to None (unlimited)
-        self.max_papers = os.environ.get("MAX_PAPERS")
+        self.max_papers = os.environ.get("MAX_PAPERS", 50)
         if self.max_papers:
             self.max_papers = int(self.max_papers)
 
