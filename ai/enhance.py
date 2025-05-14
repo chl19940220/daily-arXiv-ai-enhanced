@@ -34,12 +34,22 @@ def main():
         for line in f:
             data.append(json.loads(line))
 
-    seen_ids = set()
+    # 按ID去重，但保留关键词信息
+    id_to_keywords = {}
     unique_data = []
     for item in data:
-        if item['id'] not in seen_ids:
-            seen_ids.add(item['id'])
+        if item['id'] not in id_to_keywords:
+            id_to_keywords[item['id']] = []
             unique_data.append(item)
+        
+        # 收集每篇论文对应的所有关键词
+        if 'keyword' in item and item['keyword']:
+            if item['keyword'] not in id_to_keywords[item['id']]:
+                id_to_keywords[item['id']].append(item['keyword'])
+    
+    # 将关键词信息添加回每个论文
+    for item in unique_data:
+        item['keywords'] = id_to_keywords[item['id']]
 
     data = unique_data
 
