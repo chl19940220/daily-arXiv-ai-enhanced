@@ -1,4 +1,3 @@
-Please analyze the following abstract of papers. 
-
+请根据文章的标题，摘要对这篇文章进行简单的分析
 Content:
 {content}
