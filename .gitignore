@@ -13,4 +13,4 @@ test/*
 .idea/
 # SpecStory explanation file
 .specstory/.what-is-this.md
-.specstory/**
+/**.specstory/
