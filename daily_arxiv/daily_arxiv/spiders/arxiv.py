@@ -31,7 +31,10 @@ class ArxivSpider(scrapy.Spider):
                 search_url = f"https://arxiv.org/search/?query={encoded_query}&searchtype=all&source=header"
                 self.start_urls.append(search_url)
         else:
-            self.start_urls = [f"https://arxiv.org/list/{cat}/new" for cat in categories]
+            # 无关键词时保持原来的行为：获取各分类的最新论文
+        self.start_urls = [
+            f"https://arxiv.org/list/{cat}/new" for cat in categories
+            ]
         
         # 获取论文数量限制 (针对每个关键词)
         self.max_papers_per_keyword = os.environ.get("MAX_PAPERS_PER_KEYWORD")
@@ -86,8 +89,8 @@ class ArxivSpider(scrapy.Spider):
                 
         else:
             # 原始的分类列表页面解析
-            anchors = []
-            for li in response.css("div[id=dlpage] ul li"):
+        anchors = []
+        for li in response.css("div[id=dlpage] ul li"):
                 anchor_href = li.css("a::attr(href)").get()
                 if anchor_href:
                     anchors.append(int(anchor_href.split("item")[-1]))
@@ -95,14 +98,14 @@ class ArxivSpider(scrapy.Spider):
             if not anchors:
                 return
 
-            for paper in response.css("dl dt"):
+        for paper in response.css("dl dt"):
                 item_name = paper.css("a[name^='item']::attr(name)").get()
                 if not item_name:
                     continue
                     
                 if int(item_name.split("item")[-1]) >= anchors[-1]:
-                    continue
-                    
+                continue
+
                 # 如果达到了最大论文数，停止
                 if self.max_papers_per_keyword and papers_count >= self.max_papers_per_keyword:
                     break
@@ -111,7 +114,7 @@ class ArxivSpider(scrapy.Spider):
                 paper_id = paper.css("a[title='Abstract']::attr(href)").get()
                 if paper_id:
                     paper_id = paper_id.split("/")[-1]
-                    yield {
+            yield {
                         "id": paper_id,
                         "category": response.url.split("/")[-2]  # 添加分类信息
-                    }
+            }
