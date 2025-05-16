@@ -32,8 +32,8 @@ class ArxivSpider(scrapy.Spider):
                 self.start_urls.append(search_url)
         else:
             # 无关键词时保持原来的行为：获取各分类的最新论文
-        self.start_urls = [
-            f"https://arxiv.org/list/{cat}/new" for cat in categories
+            self.start_urls = [
+                f"https://arxiv.org/list/{cat}/new" for cat in categories
             ]
         
         # 获取论文数量限制 (针对每个关键词)
