@@ -31,10 +31,7 @@ class ArxivSpider(scrapy.Spider):
                 search_url = f"https://arxiv.org/search/?query={encoded_query}&searchtype=all&source=header"
                 self.start_urls.append(search_url)
         else:
-            # 无关键词时保持原来的行为：获取各分类的最新论文
-            self.start_urls = [
-                f"https://arxiv.org/list/{cat}/new" for cat in categories
-            ]
+            self.start_urls = [f"https://arxiv.org/list/{cat}/new" for cat in categories]
         
         # 获取论文数量限制 (针对每个关键词)
         self.max_papers_per_keyword = os.environ.get("MAX_PAPERS_PER_KEYWORD")
