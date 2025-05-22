@@ -8,9 +8,9 @@ import argparse
 import langchain_core.exceptions
 from langchain_openai import ChatOpenAI
 from langchain.prompts import (
-  ChatPromptTemplate,
-  SystemMessagePromptTemplate,
-  HumanMessagePromptTemplate,
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
 )
 from structure import Structure
 if os.path.exists('.env'):
@@ -18,11 +18,14 @@ if os.path.exists('.env'):
 template = open("template.txt", "r").read()
 system = open("system.txt", "r").read()
 
+
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, required=True, help="jsonline data file")
+    parser.add_argument("--data", type=str, required=True,
+                        help="jsonline data file")
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -41,12 +44,12 @@ def main():
         if item['id'] not in id_to_keywords:
             id_to_keywords[item['id']] = []
             unique_data.append(item)
-        
+
         # 收集每篇论文对应的所有关键词
         if 'keyword' in item and item['keyword']:
             if item['keyword'] not in id_to_keywords[item['id']]:
                 id_to_keywords[item['id']].append(item['keyword'])
-    
+
     # 将关键词信息添加回每个论文
     for item in unique_data:
         item['keywords'] = id_to_keywords[item['id']]
@@ -55,7 +58,8 @@ def main():
 
     print('Open:', args.data, file=sys.stderr)
 
-    llm = ChatOpenAI(model=model_name).with_structured_output(Structure, method="function_calling")
+    llm = ChatOpenAI(model=model_name).with_structured_output(
+        Structure, method="function_calling")
     print('Connect to:', model_name, file=sys.stderr)
     prompt_template = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(system),
@@ -74,16 +78,19 @@ def main():
         except langchain_core.exceptions.OutputParserException as e:
             print(f"{d['id']} has an error: {e}", file=sys.stderr)
             d['AI'] = {
-                 "tldr": "Error",
-                 "motivation": "Error",
-                 "method": "Error",
-                 "result": "Error",
-                 "conclusion": "Error"
+                "tldr": "Error",
+                "motivation": "Error",
+                "method": "Error",
+                "result": "Error",
+                "conclusion": "Error"
             }
-        with open(args.data.replace('.jsonl', f'_AI_enhanced_{language}.jsonl'), "a") as f:
+        language_code_for_file = language.lower()
+        output_filename = f"{os.path.splitext(args.data)[0]}_AI_enhanced_{language_code_for_file}.jsonl"
+        with open(output_filename, "a") as f:
             f.write(json.dumps(d) + "\n")
 
         print(f"Finished {idx+1}/{len(data)}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()
