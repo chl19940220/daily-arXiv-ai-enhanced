@@ -7,9 +7,7 @@ import time
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, help="Path to the jsonline file")
-    parser.add_argument("--sleep", type=int, default=10, help="在读取数据文件前暂停的秒数")
     args = parser.parse_args()
-    time.sleep(args.sleep)
     data = []
     preference = os.environ.get('CATEGORIES', 'cs.CV, cs.CL').split(',')
     preference = list(map(lambda x: x.strip(), preference))
