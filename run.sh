@@ -2,6 +2,7 @@ today=$(date -u "+%Y-%m-%d")
 year_month=$(date -u "+%Y-%m")
 data_dir="data/${year_month}"
 mkdir -p "${data_dir}"
+language_code_for_file=$(echo "$LANGUAGE" | tr '[:upper:]' '[:lower:]')
 
 cd daily_arxiv
 scrapy crawl arxiv -o "../${data_dir}/${today}.jsonl"
