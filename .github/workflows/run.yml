@@ -5,7 +5,7 @@ name: arXiv-daily-ai-enhanced
 
 on:
   schedule:
-    - cron: "30 00 * * *"
+    - cron: "30 19 * * *"
   workflow_dispatch:
 
 
@@ -25,6 +25,8 @@ jobs:
         source .venv/bin/activate
         export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
         export OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+        export NOTION_API_KEY=${{ secrets.NOTION_API_KEY }}
+        export NOTION_DATABASE_ID=${{ secrets.NOTION_DATABASE_ID }}
         export LANGUAGE="${{ vars.LANGUAGE }}"
         export CATEGORIES="${{ vars.CATEGORIES }}"
         export MODEL_NAME="${{ vars.MODEL_NAME }}"

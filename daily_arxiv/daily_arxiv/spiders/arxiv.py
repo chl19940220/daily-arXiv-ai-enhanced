@@ -2,6 +2,7 @@ import scrapy
 import os
 import urllib.parse
 from datetime import datetime, timedelta
+from daily_arxiv.items import DailyArxivItem
 
 
 class ArxivSpider(scrapy.Spider):
@@ -87,8 +88,21 @@ class ArxivSpider(scrapy.Spider):
                 title = "N/A"
 
             authors_list = paper_item.css("p.authors a ::text").getall()
-            authors = ", ".join(
-                [author.strip() for author in authors_list]) if authors_list else "N/A"
+            # Limit to two authors
+            authors = [author.strip() for author in authors_list[:2]]
+
+            # Attempt to extract institution (often not directly available on search page)
+            # This is a placeholder and might need more advanced parsing or visiting abstract page
+            institution = "N/A" 
+            # A more robust solution would involve visiting the abstract page or using a library like scholarly
+
+            summary = paper_item.css("span.abstract-full.has-text-grey-darker::text").get()
+            if summary:
+                summary = summary.strip()
+            else:
+                self.logger.warning(
+                    f"Could not find summary for paper ID {paper_id}")
+                summary = "N/A"
 
             primary_category_tag = paper_item.css(
                 "div.tags span.tag.is-primary ::text")
@@ -107,15 +121,16 @@ class ArxivSpider(scrapy.Spider):
                 break
 
             papers_count += 1
-            yield {
-                "id": paper_id,
-                "title": title,
-                "authors": authors,
-                "primary_category": primary_category,
-                "categories": all_categories,
-                "keyword": current_keyword,
-                "url": paper_link
-            }
+            item = DailyArxivItem()
+            item['id'] = paper_id
+            item['title'] = title
+            item['authors'] = authors
+            item['institution'] = institution
+            item['summary'] = summary
+            item['abs'] = paper_link
+            item['categories'] = all_categories
+            # item['keyword'] = current_keyword # This is not part of DailyArxivItem
+            yield item
 
         next_page_url_suffix = response.css(
             "a.pagination-next ::attr(href)").get()
