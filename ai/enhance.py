@@ -1,112 +1,148 @@
 import os
 import json
 import sys
-import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict
+from queue import Queue
+from threading import Lock
 
-from langchain_core.exceptions import OutputParserException
+import dotenv
+import argparse
+from tqdm import tqdm
+
+import langchain_core.exceptions
+from langchain_openai import ChatOpenAI
 from langchain.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
-from ai.structure import Structure
-from ai.llm import get_llm
-from to_notion.upload import upload_to_notion
+from structure import Structure
 
+if os.path.exists('.env'):
+    dotenv.load_dotenv()
+template = open("template.txt", "r").read()
+system = open("system.txt", "r").read()
 
-def enhance_papers(papers: List[Dict]) -> List[Dict]:
-    """
-    使用 LLM 增强论文信息。
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data", type=str, required=True, help="jsonline data file")
+    parser.add_argument("--max_workers", type=int, default=1, help="Maximum number of parallel workers")
+    return parser.parse_args()
 
-    Args:
-        papers: 从爬虫获取的论文列表。
+def process_single_item(chain, item: Dict, language: str) -> Dict:
+    """处理单个数据项"""
+    try:
+        response: Structure = chain.invoke({
+            "language": language,
+            "content": item['summary']
+        })
+        item['AI'] = response.model_dump()
+    except langchain_core.exceptions.OutputParserException as e:
+        # 尝试从错误信息中提取 JSON 字符串并修复
+        error_msg = str(e)
+        if "Function Structure arguments:" in error_msg:
+            try:
+                # 提取 JSON 字符串
+                json_str = error_msg.split("Function Structure arguments:", 1)[1].strip().split('are not valid JSON')[0].strip()
+                # 预处理 LaTeX 数学符号 - 使用四个反斜杠来确保正确转义
+                json_str = json_str.replace('\\', '\\\\')
+                # 尝试解析修复后的 JSON
+                fixed_data = json.loads(json_str)
+                item['AI'] = fixed_data
+                return item
+            except Exception as json_e:
+                print(f"Failed to fix JSON for {item['id']}: {json_e} {json_str}", file=sys.stderr)
+        
+        # 如果修复失败，返回错误状态
+        item['AI'] = {
+            "tldr": "Error",
+            "motivation": "Error",
+            "method": "Error",
+            "result": "Error",
+            "conclusion": "Error"
+        }
+    return item
 
-    Returns:
-        增强后的论文列表。
-    """
-    model_name = os.environ.get("LLM_MODEL_NAME", 'gemini-1.5-flash')
-    api_key = os.environ.get("LLM_API_KEY")
-    base_url = os.environ.get("LLM_BASE_URL")
-    language = os.environ.get("LANGUAGE", 'Chinese')
-
-    if not api_key:
-        raise ValueError("LLM_API_KEY 环境变量未设置")
-
-    # 按ID去重，但保留关键词信息
-    id_to_keywords = {}
-    unique_papers = []
-    for paper in papers:
-        if paper['id'] not in id_to_keywords:
-            id_to_keywords[paper['id']] = []
-            unique_papers.append(paper)
-
-        if 'keyword' in paper and paper['keyword']:
-            if paper['keyword'] not in id_to_keywords[paper['id']]:
-                id_to_keywords[paper['id']].append(paper['keyword'])
-
-    for paper in unique_papers:
-        paper['keywords'] = id_to_keywords[paper['id']]
-
-    llm = get_llm(model_name, api_key, base_url).with_structured_output(
-        Structure, method="function_calling")
-    print(f'Connect to: {model_name}', file=sys.stderr)
-
-    system_template = open("ai/system.txt", "r", encoding="utf-8").read()
-    human_template = open("ai/template.txt", "r", encoding="utf-8").read()
-
+def process_all_items(data: List[Dict], model_name: str, language: str, max_workers: int) -> List[Dict]:
+    """并行处理所有数据项"""
+    llm = ChatOpenAI(model=model_name).with_structured_output(Structure, method="function_calling")
+    print('Connect to:', model_name, file=sys.stderr)
+    
     prompt_template = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(system_template),
-        HumanMessagePromptTemplate.from_template(template=human_template)
+        SystemMessagePromptTemplate.from_template(system),
+        HumanMessagePromptTemplate.from_template(template=template)
     ])
 
     chain = prompt_template | llm
+    
+    # 使用线程池并行处理
+    processed_data = [None] * len(data)  # 预分配结果列表
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_idx = {
+            executor.submit(process_single_item, chain, item, language): idx
+            for idx, item in enumerate(data)
+        }
+        
+        # 使用tqdm显示进度
+        for future in tqdm(
+            as_completed(future_to_idx),
+            total=len(data),
+            desc="Processing items"
+        ):
+            idx = future_to_idx[future]
+            try:
+                result = future.result()
+                processed_data[idx] = result
+            except Exception as e:
+                print(f"Item at index {idx} generated an exception: {e}", file=sys.stderr)
+                # 保持原始数据
+                processed_data[idx] = data[idx]
+    
+    return processed_data
 
-    enhanced_papers = []
-    for idx, paper in enumerate(unique_papers):
-        try:
-            response: Structure = chain.invoke({
-                "language": language,
-                "title": paper['title'],
-                "summary": paper['summary']
-            })
-            paper['AI_summary'] = response.model_dump()
-            enhanced_papers.append(paper)
-        except OutputParserException as e:
-            print(f"{paper['id']} has an error: {e}", file=sys.stderr)
-            paper['AI_summary'] = {
-                "tldr": "Error",
-                "motivation": "Error",
-                "method": "Error",
-                "result": "Error",
-                "conclusion": "Error"
-            }
-            enhanced_papers.append(paper)
+def main():
+    args = parse_args()
+    model_name = os.environ.get("MODEL_NAME", 'deepseek-chat')
+    language = os.environ.get("LANGUAGE", 'Chinese')
 
-        print(f"Finished {idx + 1}/{len(unique_papers)}", file=sys.stderr)
+    # 检查并删除目标文件
+    target_file = args.data.replace('.jsonl', f'_AI_enhanced_{language}.jsonl')
+    if os.path.exists(target_file):
+        os.remove(target_file)
+        print(f'Removed existing file: {target_file}', file=sys.stderr)
 
-    # Upload to Notion
-    notion_api_key = os.environ.get("NOTION_API_KEY")
-    notion_database_id = os.environ.get("NOTION_DATABASE_ID")
+    # 读取数据
+    data = []
+    with open(args.data, "r") as f:
+        for line in f:
+            data.append(json.loads(line))
 
-    if not notion_api_key:
-        print("Error: NOTION_API_KEY environment variable not set. Skipping Notion upload.", file=sys.stderr)
-    elif not notion_database_id:
-        print("Error: NOTION_DATABASE_ID environment variable not set. Skipping Notion upload.", file=sys.stderr)
-    else:
-        print("Uploading enhanced papers to Notion...", file=sys.stderr)
-        upload_to_notion(enhanced_papers, notion_api_key, notion_database_id)
+    # 去重
+    seen_ids = set()
+    unique_data = []
+    for item in data:
+        if item['id'] not in seen_ids:
+            seen_ids.add(item['id'])
+            unique_data.append(item)
 
-    return enhanced_papers
+    data = unique_data
+    print('Open:', args.data, file=sys.stderr)
+    
+    # 并行处理所有数据
+    processed_data = process_all_items(
+        data,
+        model_name,
+        language,
+        args.max_workers
+    )
+    
+    # 保存结果
+    with open(target_file, "w") as f:
+        for item in processed_data:
+            f.write(json.dumps(item) + "\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Enhance paper data with LLM and upload to Notion.")
-    parser.add_argument("--data", type=str, required=True, help="Path to the JSONL data file.")
-    args = parser.parse_args()
-
-    papers_data = []
-    with open(args.data, 'r', encoding='utf-8') as f:
-        for line in f:
-            papers_data.append(json.loads(line))
-
-    enhance_papers(papers_data)
+    main()
