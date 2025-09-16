@@ -1,19 +1,14 @@
-today=$(date -u "+%Y-%m-%d")
-year_month=$(date -u "+%Y-%m")
-data_dir="data/${year_month}"
-mkdir -p "${data_dir}"
-
-temp_jsonl_file="${data_dir}/${today}.jsonl"
-
+today=`date -u "+%Y-%m-%d"`
 cd daily_arxiv
-scrapy crawl arxiv -o "../${temp_jsonl_file}"
+scrapy crawl arxiv -o ../data/${today}.jsonl
 
 cd ../ai
-echo "Current directory: $(pwd)"
-echo "Running enhance.py with input: ../${temp_jsonl_file}"
-python enhance.py --data "../${temp_jsonl_file}"
-echo "enhance.py finished."
+python enhance.py --data ../data/${today}.jsonl
+
+cd ../to_md
+python convert.py --data ../data/${today}_AI_enhanced_${LANGUAGE}.jsonl
 
 cd ..
-rm "${temp_jsonl_file}"
-echo "Cleaned up temporary JSONL file."
+# python update_readme.py
+
+ls data/*.jsonl | sed 's|data/||' > assets/file-list.txt
